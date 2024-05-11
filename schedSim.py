@@ -48,10 +48,10 @@ def round_robin(jobs, quantum):
 
     # Loop until all jobs have been completed.
     while jobs_remaining > 0:
-        for job in jobs:            
-            # If there is a gap in jobs, add that time difference.
-            if job.arrival_time > elapsed_time:
-                gap = elapsed_time - job.arrival_time
+        for job in jobs:
+            # There could be a gap in job arrival times where the CPU is idle. 
+            if job.arrival_time > elapsed_time and not job.completed:
+                gap = job.arrival_time - elapsed_time
                 elapsed_time += gap
             # Only work on jobs that have arrived and have not completed.
             if elapsed_time >= job.arrival_time and not job.completed:
@@ -83,34 +83,43 @@ def round_robin(jobs, quantum):
     print_average_info(jobs)
 
 def srtn(jobs):
-    elapsed_time = 0
+    elapsed_time = jobs[0].arrival_time
     jobs_remaining = len(jobs)
-    # Get the shortest remaining job.
-    job = get_shortest_remaining_job(jobs, elapsed_time)
+    shortest_job = get_shortest_remaining_job(jobs, elapsed_time, None)
+
     while jobs_remaining > 0:
-        # Work on the job for a unit of time and check again for a new shortest job.
+        if shortest_job.arrival_time > elapsed_time and not shortest_job.completed:
+            gap = shortest_job.arrival_time - elapsed_time
+            elapsed_time += gap
+        # Perform a unit of work on the current job.
         elapsed_time += 1
-        job.run_time -= 1
-        job.cpu_time += 1
-        # If the job is complete.
-        if job.run_time == 0:
+        shortest_job.run_time -= 1
+        shortest_job.cpu_time += 1
+        
+        # Check if the job is complete after that unit of work.
+        if shortest_job.run_time == 0:
             jobs_remaining -= 1
-            job.completed = True
-            job.wait_time = elapsed_time - job.arrival_time - job.cpu_time
-            job.turnaround_time = elapsed_time - job.arrival_time
-        job = get_shortest_remaining_job(jobs, elapsed_time)
-    # Jobs are complete, print their data.
+            shortest_job.completed = True
+            shortest_job.turnaround_time = elapsed_time - shortest_job.arrival_time
+            shortest_job.wait_time = elapsed_time - shortest_job.arrival_time - shortest_job.cpu_time
+
+        if jobs_remaining > 0:
+            shortest_job = get_shortest_remaining_job(jobs, elapsed_time, shortest_job)
+
     print_job_info(jobs)
     print_average_info(jobs)
 
 
-def get_shortest_remaining_job(jobs, elapsed_time):
-    shortest_job = jobs[0]
-    for job in jobs:
-        if job.run_time < shortest_job.run_time and job.arrival_time <= elapsed_time and job.completed == False:
-            shortest_job = job
-    return shortest_job
-    
+def get_shortest_remaining_job(jobs, elapsed_time, current_job):
+    uncompleted_jobs = [job for job in jobs if not job.completed]
+
+    if current_job is None or current_job.completed:
+        current_job = uncompleted_jobs[0]
+    for job in uncompleted_jobs:
+        if job.run_time < current_job.run_time and job.arrival_time <= elapsed_time:
+            current_job = job
+    return current_job
+
 def print_job_info(jobs):
     for job in jobs:
         print("Job " + "{:3d}".format(job.job_number) + " -- " + "Turnaround "
@@ -120,6 +129,7 @@ def print_job_info(jobs):
 def print_average_info(jobs):
     avg_turnaround = 0
     avg_wait = 0
+
     for job in jobs:
         avg_turnaround += job.turnaround_time
         avg_wait += job.wait_time
@@ -166,11 +176,11 @@ def main():
         job_number += 1
 
     # Check for scheduling algorithm. If Round Robin, get quantum.
-    if args.p[0] == "SRTN":
+    if args.p is not None and args.p[0] == "SRTN":
         # Run SRTN algorithm and print results.
         srtn(jobs)
         algorithm = args.p[0]
-    elif args.p[0] == "RR":
+    elif args.p is not None and args.p[0] == "RR":
         # Run RR algorithm and print results.
         if args.q is not None:
             round_robin(jobs, int(args.q[0]))
